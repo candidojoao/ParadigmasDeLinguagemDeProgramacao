@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Aula 07 · João Paulo Candido da Costa</title>
+<style>
+body{font:15px/1.55 "Segoe UI",system-ui,sans-serif;max-width:820px;margin:2rem auto;padding:0 16px;color:#111}
+h1{margin-bottom:.3rem}
+h2{border-bottom:2px solid #ddd;padding-bottom:.25rem;margin-top:1.8rem}
+h3{margin-top:1.3rem}
+pre{background:#f4f4f4;padding:.6rem .8rem;border-radius:6px;white-space:pre-wrap;font:12.5px/1.45 Consolas,monospace;break-inside:avoid}
+code{font:13px Consolas,monospace;background:#f4f4f4;padding:0 3px;border-radius:3px}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:14px;break-inside:avoid}
+th,td{border:1px solid #ccc;padding:.35rem .5rem;text-align:left;vertical-align:top}
+th{background:#f0f0f0}
+.ident{color:#333}
+</style>
+</head>
+<body>
+<h1>Aula 07 — Expressões, Atribuição e Controle de Fluxo</h1>
+<p class="ident"><b>Nome:</b> João Paulo Candido da Costa · <b>R.A:</b> 24000797-2</p>
+
+<h2>1. Panorama da aula</h2>
+<p>O tema central é entender exatamente o que um programa executa: como as expressões são calculadas, como os valores são guardados em variáveis e como a ordem de execução é desviada. Precedência mal lida, conversão automática de tipos e desvios de fluxo são as armadilhas mais comuns.</p>
+<p>Três falhas famosas mostram que esses detalhes têm consequências reais:</p>
+<ul>
+<li><b>goto fail (Apple, 2014):</b> um <code>if</code> sem chaves era seguido por duas linhas <code>goto fail;</code> idênticas. A segunda executava sempre, pulando a checagem da assinatura, e o iOS e o macOS passaram a aceitar certificados forjados.</li>
+<li><b>Zune (Microsoft, 2008):</b> no último dia de um ano bissexto, um laço <code>while</code> deixava de avançar e rodava para sempre, travando os aparelhos.</li>
+<li><b>PHP e o operador <code>==</code>:</b> a comparação <code>"0e123" == "0e456"</code> resulta verdadeira, pois as duas strings são lidas como 0 em notação científica. Sistemas que comparavam hashes assim aceitavam senhas erradas.</li>
+</ul>
+<p>Em nenhum dos três casos a regra de negócio estava errada. A falha estava na avaliação de uma expressão ou numa estrutura de controle.</p>
+
+<h2>2. Expressões</h2>
+<h3>2.1 Precedência e associatividade</h3>
+<p>A precedência diz qual operador é resolvido antes (multiplicação antes de soma). A associatividade desempata operadores de mesmo nível: <code>10 - 4 - 3</code> é lido como <code>(10 - 4) - 3</code>. A maioria agrupa da esquerda para a direita, mas a potência <code>**</code> agrupa pela direita em Python, JavaScript, Ruby e Fortran. Assim, <code>2 ** 3 ** 2</code> vale <code>2 ** 9</code>, ou 512.</p>
+<p>Essas regras são escolhas de projeto. APL avalia tudo da direita para a esquerda (<code>3 × 4 + 5</code> dá 27). Lisp dispensa precedência porque escreve o operador antes dos operandos, entre parênteses: <code>(+ a (* b c))</code>.</p>
+<p>Casos que confundem:</p>
+<ul>
+<li><code>-2 ** 2</code> dá -4 em Python (a potência vem antes do sinal negativo), é erro de sintaxe em JavaScript e <code>=-2^2</code> dá 4 no Excel.</li>
+<li>Divisão com negativos: Java e C cortam em direção ao zero (<code>-7 / 2</code> dá -3); Python arredonda para baixo (<code>-7 // 2</code> dá -4).</li>
+<li>Na dúvida, parênteses resolvem.</li>
+</ul>
+<p>Teste em Python:</p>
+<pre><code>a, b, c = 3, 4, 5
+print(a + b * c)        # 23
+print((a + b) * c)      # 35
+print(-2 ** 2)          # -4
+print((-2) ** 2)        # 4
+print(2 ** 3 ** 2)      # 512
+print(10 - 4 - 3)       # 3
+print(-7 // 2, -7 % 2)  # -4 1</code></pre>
+<p>O ponto-chave é <code>-2 ** 2</code> resultar em -4, e não 4.</p>
+
+<h3>2.2 Ordem dos operandos e efeitos colaterais</h3>
+<p>Uma função tem efeito colateral quando modifica uma variável global ou um parâmetro. Nesse caso, a ordem em que os operandos são lidos altera o resultado. No exemplo do livro, <code>a = a + fun1()</code> com <code>a = 5</code>, e <code>fun1</code> muda <code>a</code> para 17 e retorna 3. Se <code>a</code> for lido antes da chamada, o resultado é 8; se depois, é 20.</p>
+<pre><code>#include &lt;stdio.h&gt;
+
+int a = 5;
+
+int fun1(void) {
+    a = 17;
+    return 3;
+}
+
+int main(void) {
+    a = a + fun1();
+    printf("a = %d\n", a); // gcc: a = 20
+    return 0;
+}</code></pre>
+<p>Nos testes, Java imprime 8, pois a linguagem garante avaliação da esquerda para a direita. C (gcc) e Go imprimem 20: o padrão de C não fixa a ordem, e Go não define quando a variável é lida em relação à chamada.</p>
+<p><b>Transparência referencial:</b> sem efeitos colaterais, a ordem deixa de importar e expressões de mesmo valor podem ser trocadas entre si (<code>f(x) + f(x)</code> equivale a <code>2 * f(x)</code>). Funções puras garantem essa propriedade.</p>
+
+<h3>2.3 Sobrecarga de operadores</h3>
+<p>Sobrecarregar é dar mais de um significado ao mesmo símbolo. Em Java, <code>+</code> soma inteiros, soma reais e junta textos: <code>'a' + 1</code> dá 98 (o caractere vira inteiro), enquanto <code>"" + 'a' + 1</code> dá <code>"a1"</code>.</p>
+<p>C++, C#, Python, Rust e Kotlin permitem que o programador defina sobrecargas (em Python via <code>__add__</code>, em Rust via trait <code>Add</code>). Java não permite, e por isso <code>BigDecimal</code> exige <code>x.add(y)</code> no lugar de <code>x + y</code>. A sobrecarga deixa o código mais legível (<code>v1 + v2</code>), mas pode ocultar custo e comportamento.</p>
+
+<h3>2.4 Conversões de tipo</h3>
+<table>
+<tr><th>Tipo de conversão</th><th>O que faz</th><th>Risco</th><th>Exemplo</th></tr>
+<tr><td>Alargamento</td><td>Vai para um tipo maior (int → double)</td><td>Perda de precisão</td><td><code>123456789</code> → float → int vira <code>123456792</code></td></tr>
+<tr><td>Estreitamento</td><td>Vai para um tipo menor</td><td>Perda de informação</td><td><code>(int) 3.99</code> dá 3; <code>(byte) 200</code> dá -56</td></tr>
+<tr><td>Coerção</td><td>Conversão implícita, feita pelo compilador</td><td>Esconde erros de digitação</td><td><code>"5" - 2</code> dá 3 em JS</td></tr>
+<tr><td>Cast</td><td>Conversão explícita, pedida pelo programador</td><td>Fica visível no código</td><td><code>(double) x</code></td></tr>
+</table>
+<p>Como a coerção pode mascarar erros, Go, Rust, ML e F# não convertem tipos numéricos automaticamente.</p>
+<p>JavaScript e PHP são muito agressivos na coerção. Em JS, <code>"5" + 2</code> dá <code>"52"</code>, <code>"b" + "a" + +"a" + "a"</code> dá <code>"baNaNa"</code> e o <code>==</code> não é transitivo: <code>0 == ""</code> e <code>0 == "0"</code> são verdadeiros, mas <code>"" == "0"</code> é falso. Regra prática: em JS e PHP, prefira <code>===</code> e <code>!==</code>, que comparam sem converter.</p>
+<pre><code>console.log("5" - 2);                       // 3
+console.log("5" + 2);                       // 52
+console.log("5" * "2");                     // 10
+console.log(true + 1);                      // 2
+console.log(null + 1, undefined + 1);       // 1 NaN
+console.log("b" + "a" + +"a" + "a");        // baNaNa
+console.log(0 == "", 0 == "0", "" == "0");  // true true false
+console.log(0 === "", 0 === "0");           // false false</code></pre>
+
+<h3>2.5 Expressões relacionais, booleanas e curto-circuito</h3>
+<p>C não tem um tipo booleano de verdade: 0 é falso e todo o resto é verdadeiro. Por isso <code>3 &gt; 2 &gt; 1</code> dá 0 em C (<code>3 &gt; 2</code> vale 1, e <code>1 &gt; 1</code> é falso). Python encadeia comparações, então a mesma expressão dá <code>True</code>.</p>
+<p>Python e JavaScript aceitam qualquer valor numa condição (0, vazio e nulo valem como falso). Java, C#, Go e Rust exigem um booleano.</p>
+<p>No curto-circuito, o resultado é decidido antes de avaliar todos os operandos. É o que torna seguro <code>while (i &lt; lista.length &amp;&amp; lista[i] != chave)</code>: se o índice estourar, a segunda parte nem é lida. Em Java, <code>&amp;&amp;</code> faz curto-circuito e <code>&amp;</code> não. Atenção: um efeito colateral no segundo operando pode nunca acontecer.</p>
+<p>Em Python, <code>and</code> e <code>or</code> retornam um dos operandos: <code>0 or "padrão"</code> dá <code>"padrão"</code>. Em JavaScript, <code>quantidade || 10</code> descarta o 0 legítimo; <code>??</code> corrige isso, pois só substitui <code>null</code> e <code>undefined</code>.</p>
+
+<h2>3. Atribuição</h2>
+<p>Em C e JavaScript, atribuir é uma expressão: a operação devolve o valor que foi guardado. Isso permite escrever <code>sum = count = 0</code> ou <code>while ((ch = getchar()) != EOF)</code>. O preço é que <code>if (x = y)</code> compila e atribui em vez de comparar.</p>
+<p>Java e C# bloqueiam esse erro porque o <code>if</code> só aceita booleano. Em Python, Go e Rust, a atribuição é uma sentença, não uma expressão (Python oferece apenas o operador "morsa" <code>:=</code> para esse uso).</p>
+<p>Outras formas de atribuir:</p>
+<ul>
+<li>Composta: <code>a += b</code>.</li>
+<li>Unária: <code>count++</code>.</li>
+<li>Múltipla: <code>a, b = b, a</code> (Python e Go).</li>
+<li>Ligação imutável: em linguagens funcionais e em Rust, <code>let</code> associa um nome a um valor fixo; <code>let x = x + 1</code> cria uma nova variável que encobre a anterior (sombreamento).</li>
+</ul>
+<p><b>Atribuição de modo misto:</b> C converte para qualquer lado sem avisar (<code>int i = 3.7</code> guarda 3; <code>char c = 300</code> guarda 44). Java só aceita alargamento sem cast, mas <code>i += 3.7</code> compila porque o <code>+=</code> embute um cast implícito.</p>
+<p><b>Armadilha clássica:</b> <code>double taxa = acertos / total * 100;</code> com operandos inteiros resulta em 0.0. A divisão inteira acontece primeiro, e só o resultado já truncado é convertido para <code>double</code> (é a questão 6 do exercício).</p>
+
+<h2>4. Estruturas de controle</h2>
+<h3>4.1 Quantas estruturas são necessárias?</h3>
+<p>Böhm e Jacopini (1966) demonstraram que sequência, seleção e um laço lógico são suficientes para expressar qualquer algoritmo, sem precisar de <code>goto</code>. Estruturas como <code>for</code>, <code>switch</code>, <code>do</code> e <code>foreach</code> existem por conveniência. O limite é a legibilidade: quanto mais recursos uma linguagem tem, menor a parte do código alheio que cada pessoa reconhece.</p>
+
+<h3>4.2 Seleção de dois caminhos e o "else pendente"</h3>
+<p>Em Java, C, C++ e C#, o <code>else</code> se liga ao <code>if</code> mais próximo que ainda não tem <code>else</code>, e a indentação não conta (somente Python e F# a consideram). Em <code>if (sum == 0) if (count == 0) result = 0; else result = 1;</code>, o <code>else</code> pertence ao <code>if</code> interno, então <code>result</code> pode virar 1 mesmo que a indentação sugira o contrário.</p>
+<p>Chaves obrigatórias (Perl, Go e Rust) eliminam essa ambiguidade. Em Rust o <code>if</code> é uma expressão que devolve valor; em Python há a forma <code>x if c else y</code>.</p>
+
+<h3>4.3 Seleção múltipla em quatro linguagens</h3>
+<p>O mesmo exemplo, com <code>n = 2</code>, foi escrito em C, Java, Go e Rust para comparar o que cada um imprime.</p>
+<pre><code>// C: sem break, o controle escorre para os casos seguintes
+int n = 2;
+switch (n) {
+    case 1: printf("um\n");
+    case 2: printf("dois\n");
+    case 3: printf("tres\n");
+    default: printf("outro\n");
+}
+// Saída: dois, tres, outro</code></pre>
+<pre><code>// Java 14+: switch com -&gt; é uma expressão e não escorre
+int n = 2;
+String r = switch (n) {
+    case 1 -&gt; "um";
+    case 2 -&gt; "dois";
+    case 3 -&gt; "tres";
+    default -&gt; "outro";
+};
+System.out.println(r); // dois</code></pre>
+<pre><code>// Go: cada caso termina sozinho; escorrer exige fallthrough
+n := 2
+switch n {
+case 1:
+    fmt.Println("um")
+case 2:
+    fmt.Println("dois")
+case 3:
+    fmt.Println("tres")
+default:
+    fmt.Println("outro")
+} // dois</code></pre>
+<pre><code>// Rust: match precisa cobrir todos os casos
+let n = 2;
+let r = match n {
+    1 =&gt; "um",
+    2 =&gt; "dois",
+    3 =&gt; "tres",
+    _ =&gt; "outro", // sem esta linha, não compila
+};
+println!("{}", r); // dois</code></pre>
+<table>
+<tr><th>Linguagem</th><th>Saída com n = 2</th><th>Escorre entre casos?</th><th>Caso padrão</th><th>Destaque</th></tr>
+<tr><td>C</td><td>dois, tres, outro</td><td>Sim, se faltar <code>break</code></td><td>Opcional</td><td>Fácil esquecer o <code>break</code></td></tr>
+<tr><td>Java (<code>-&gt;</code>)</td><td>dois</td><td>Não</td><td>Obrigatório para <code>int</code>; exaustivo para <code>enum</code></td><td>Vira expressão com valor</td></tr>
+<tr><td>Go</td><td>dois</td><td>Só com <code>fallthrough</code></td><td>Opcional</td><td>Dispensa <code>break</code></td></tr>
+<tr><td>Rust (<code>match</code>)</td><td>dois</td><td>Não</td><td>Cobertura total obrigatória</td><td>Aceita faixas e padrões</td></tr>
+</table>
+<p>C é a única das quatro em que escorrer é o comportamento padrão; o livro classifica esse <code>switch</code> como "relativamente primitivo", já que o <code>break</code> é um <code>goto</code> limitado. As demais eliminam essa classe de erro, e o <code>match</code> de Rust ainda obriga a tratar todos os casos.</p>
+
+<h3>4.4 Laços</h3>
+<p>No <code>for</code> de C, as três expressões são opcionais e a variável de controle pode ser alterada dentro do corpo. Por isso <code>for (int i = 0; i &lt; 10; i++) { printf("%d ", i); i += 2; }</code> imprime <code>0 3 6 9</code>. Já o <code>for</code> de Python percorre um iterável, então alterar <code>i</code> no corpo não muda nada (imprime de 0 a 9).</p>
+<p>Nos laços lógicos, o teste pode vir antes (<code>while</code>) ou depois (<code>do-while</code>, que roda pelo menos uma vez). Java e Perl têm <code>break</code> com rótulo, que encerra dois laços de uma vez. Em JavaScript, <code>for...in</code> percorre as chaves (strings) e <code>for...of</code> percorre os valores; somar com <code>for...in</code> produz <code>"0012"</code>.</p>
+<p><b>Caso Zune:</b> com <code>dias == 366</code> num ano bissexto, nenhum ramo do <code>while</code> modificava <code>dias</code>, e o laço nunca terminava. A pergunta certa é qual invariante o laço deveria garantir: a cada volta, <code>dias</code> precisa diminuir.</p>
+
+<h3>4.5 goto e comandos protegidos</h3>
+<p>O <code>goto</code> é a instrução de controle mais poderosa e, por isso, a mais arriscada: torna o programa difícil de ler e de manter (Dijkstra, 1968, "Go To Statement Considered Harmful"). Java não tem <code>goto</code>; C, C++, C# e Go têm. <code>break</code>, <code>continue</code> e <code>return</code> funcionam como desvios restritos e melhoram a legibilidade.</p>
+<p>No <i>goto fail</i> da Apple, a segunda linha <code>goto fail;</code> estava fora do <code>if</code> por falta de chaves. A verificação da assinatura nunca era executada e <code>err</code> permanecia 0, valor que significa "válido". Chaves obrigatórias (Go e Rust) ou o aviso de indentação enganosa do <code>gcc -Wall</code> teriam evitado a falha.</p>
+<p><b>Comandos protegidos de Dijkstra:</b> em <code>if ... fi</code> e <code>do ... od</code>, todas as guardas são avaliadas. Se mais de uma for verdadeira, uma delas é escolhida de forma não determinística; se nenhuma for, o <code>if</code> gera erro e o <code>do</code> termina. Essa ideia fundamenta o CSP de Hoare e o <code>select</code> de Go, que sorteia entre canais prontos. Em Haskell, as guardas são testadas em ordem, sendo portanto determinísticas.</p>
+
+<h2>5. Exercício "Encontre o bug"</h2>
+<p>Para cada trecho, responde-se: (a) o que é impresso, (b) qual regra da linguagem gera o problema e (c) como corrigir. As respostas foram confirmadas executando o código.</p>
+
+<h3>Questão 1 (JavaScript)</h3>
+<pre><code>const precos = [10, 20, 30];
+let total = 0;
+for (const p in precos) total += p;
+console.log("Total: " + total);</code></pre>
+<ul>
+<li><b>(a) Saída:</b> <code>Total: 0012</code>.</li>
+<li><b>(b) Causa:</b> <code>for...in</code> itera sobre as chaves do array, que são as strings <code>"0"</code>, <code>"1"</code> e <code>"2"</code>, e o <code>+</code> passa a concatenar.</li>
+<li><b>(c) Correção:</b> usar <code>for...of</code> ou <code>precos.reduce((a, b) =&gt; a + b, 0)</code>.</li>
+</ul>
+
+<h3>Questão 2 (Python)</h3>
+<pre><code>def desconto(preco, d=None):
+    d = d or 10         # padrão: 10%
+    return preco * (100 - d) / 100
+
+print(desconto(200, 0))</code></pre>
+<ul>
+<li><b>(a) Saída:</b> <code>180.0</code>, quando o esperado era <code>200.0</code> (desconto zero).</li>
+<li><b>(b) Causa:</b> em <code>d or 10</code>, o 0 é tratado como falso e o <code>or</code> devolve o segundo operando.</li>
+<li><b>(c) Correção:</b> <code>if d is None: d = 10</code>. Em JavaScript, o <code>??</code> resolveria.</li>
+</ul>
+
+<h3>Questão 3 (Java)</h3>
+<pre><code>int dia = 2;
+String nome = "";
+switch (dia) {
+    case 1: nome = "domingo";
+    case 2: nome = "segunda";
+    case 3: nome = "terça";
+    default: nome = "inválido";
+}
+System.out.println(nome);</code></pre>
+<ul>
+<li><b>(a) Saída:</b> <code>inválido</code>.</li>
+<li><b>(b) Causa:</b> sem <code>break</code>, a execução escorre do <code>case 2</code> até o <code>default</code>, sobrescrevendo o valor.</li>
+<li><b>(c) Correção:</b> colocar <code>break</code> em cada caso ou usar o <code>switch</code> com <code>-&gt;</code> (Java 14+).</li>
+</ul>
+
+<h3>Questão 4 (C)</h3>
+<pre><code>int saldo = 100, saque = 50;
+if (saque &gt; saldo);
+    printf("saldo insuficiente\n");
+printf("fim\n");</code></pre>
+<ul>
+<li><b>(a) Saída:</b> <code>saldo insuficiente</code> e <code>fim</code>, embora o saque seja menor que o saldo.</li>
+<li><b>(b) Causa:</b> o <code>;</code> logo após o <code>if</code> é uma sentença vazia; o <code>printf</code> seguinte fica fora da condição.</li>
+<li><b>(c) Correção:</b> usar chaves sempre. O <code>gcc -Wall</code> alerta com <code>-Wempty-body</code>.</li>
+</ul>
+
+<h3>Questão 5 (Go)</h3>
+<pre><code>x := 10
+if x &gt; 5 {
+    x := x * 2
+    fmt.Println("dentro:", x)
+}
+fmt.Println("fora:", x)</code></pre>
+<ul>
+<li><b>(a) Saída:</b> <code>dentro: 20</code> e <code>fora: 10</code>.</li>
+<li><b>(b) Causa:</b> o <code>:=</code> dentro do bloco declara um novo <code>x</code> (sombreamento) em vez de alterar o de fora.</li>
+<li><b>(c) Correção:</b> trocar por <code>x = x * 2</code>.</li>
+</ul>
+
+<h3>Questão 6 (Java)</h3>
+<pre><code>int acertos = 7, total = 10;
+double taxa = acertos / total * 100;
+System.out.println(taxa + "%");</code></pre>
+<ul>
+<li><b>(a) Saída:</b> <code>0.0%</code>.</li>
+<li><b>(b) Causa:</b> <code>7 / 10</code> é divisão inteira e resulta em 0; só depois o valor é convertido para <code>double</code> (atribuição de modo misto).</li>
+<li><b>(c) Correção:</b> <code>acertos * 100.0 / total</code> ou <code>(double) acertos / total * 100</code>, ambos resultando em <code>70.0%</code>.</li>
+</ul>
+
+<h2>6. Pesquisa complementar</h2>
+<ul>
+<li><b>Expressões em Ruby:</b> operadores são métodos (<code>1 + 2</code> equivale a <code>1.+(2)</code>) e podem ser redefinidos. Como em Python, <code>**</code> associa pela direita. Iteradores recebem blocos: <code>3.times { |i| print i }</code> imprime <code>012</code>.</li>
+<li><b>Expressões em Lisp:</b> a notação prefixa e os parênteses definem a ordem, então não há precedência. <code>(+ a (* b c))</code> corresponde a <code>a + b * c</code>, e <code>(+ 1 2 3 4 5)</code> mostra um operador aplicado a vários operandos. O <code>if</code> também devolve valor: <code>(if (&gt; a 0) a (* 2 a))</code>.</li>
+<li><b>Expressões condicionais:</b> escolhem um valor dentro de uma expressão. Em C e Java há o ternário <code>c ? a : b</code>; em Python, <code>x if c else y</code>; em Rust e F#, o próprio <code>if</code> retorna valor.</li>
+<li><b>Erros em expressões:</b> segundo o livro (seção 7.4.3, p. 313), surgem dos limites da aritmética da máquina, como estouro (overflow) e divisão por zero. A linguagem pode lançar exceções ou ignorar o problema silenciosamente.</li>
+<li><b>Tabelas de desvio:</b> num <code>switch</code> com muitos casos, o compilador pode gerar uma tabela de saltos (acesso direto ao caso) ou uma busca binária, em vez de testar caso a caso. Por isso um <code>switch</code> grande tende a ser mais rápido que uma sequência de <code>if</code>.</li>
+<li><b>Laços em linguagens funcionais:</b> sem variáveis mutáveis, a repetição é feita por recursão.</li>
+<li><b>Iteradores e blocos de Ruby:</b> em vez de um <code>for</code> com contador, o objeto recebe um bloco e o executa para cada elemento (<code>each</code>, <code>times</code>, <code>select</code>), na mesma linha do <code>forEach</code> de JavaScript.</li>
+<li><b>Dijkstra (1968) e Knuth (1974):</b> o artigo de Dijkstra argumenta que o <code>goto</code> dificulta entender o programa e provar que ele está correto. Knuth respondeu que alguns usos são aceitáveis, como saltar para um bloco único de limpeza no tratamento de erros em C.</li>
+</ul>
+
+<h2>7. Síntese</h2>
+<table>
+<tr><th>Tema</th><th>Armadilha</th><th>O que ajuda</th></tr>
+<tr><td>Precedência</td><td><code>-2 ** 2</code>, <code>1 + 2 + "3"</code></td><td>Parênteses; JS exige <code>(-2) ** 2</code></td></tr>
+<tr><td>Ordem dos operandos</td><td><code>a + f()</code> com efeito colateral dá resultados diferentes em C e Go</td><td>Java fixa a ordem; funções puras</td></tr>
+<tr><td>Conversões</td><td>Coerção silenciosa em C, JS e PHP</td><td>Conversão explícita (Go, Rust); <code>===</code> em JS</td></tr>
+<tr><td>Booleanos</td><td>0, <code>""</code> e <code>[]</code> como falsos; <code>a &gt; b &gt; c</code> em C</td><td><code>if</code> só com booleano (Java, Go, Rust); <code>??</code></td></tr>
+<tr><td>Atribuição</td><td><code>if (x = y)</code> compila em C</td><td>Atribuição como sentença (Python, Go, Rust)</td></tr>
+<tr><td>Seleção</td><td><code>switch</code> sem <code>break</code>; else pendente</td><td><code>-&gt;</code> em Java, <code>match</code> exaustivo, chaves obrigatórias</td></tr>
+<tr><td>Laços</td><td><code>for...in</code> em JS; laço que não avança</td><td><code>for...of</code>, iteradores, <code>break</code> com rótulo</td></tr>
+<tr><td>Desvio</td><td><code>goto</code> irrestrito</td><td><code>break</code>, <code>continue</code> e <code>return</code></td></tr>
+</table>
+<p>Linguagens mais recentes (Go, Rust, Kotlin, Swift) incorporaram as lições de C: booleano obrigatório no <code>if</code>, chaves obrigatórias, conversões explícitas, seleção múltipla sem escorrer e atribuição como sentença. Cada restrição elimina uma família inteira de bugs, trocando um pouco de facilidade de escrita por confiabilidade, o trade-off apresentado no Capítulo 1.</p>
+
+<h2>Referências</h2>
+<ul>
+<li>SEBESTA, R. W. <i>Conceitos de Linguagens de Programação</i>. 11ª ed. Capítulos 7 e 8 (p. 299–361).</li>
+<li>Slides e exemplos da Aula 07.</li>
+</ul>
+</body>
+</html>
